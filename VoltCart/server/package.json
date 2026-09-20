@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
+    "worker": "node src/worker.js",
     "seed": "node src/seed/seed.js",
     "test:oversell": "node scripts/oversell-test.js"
   },
