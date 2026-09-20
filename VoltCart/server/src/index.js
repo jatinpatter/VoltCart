@@ -1,40 +1,56 @@
+import 'dotenv/config';
 import mongoose from 'mongoose';
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { connectMongo } from './config/db.js';
 import { connectRedis, redis, redisBlocking } from './config/redis.js';
-import { syncSaleStatus } from './services/saleService.js';
-import { startReservationSweeper, stopReservationSweeper } from './services/reservationSweeper.js';
-import { startStreamConsumer, stopStreamConsumer } from './services/streamConsumer.js';
-import { startReconciler, stopReconciler } from './services/reconciler.js';
-import { startOrderSimulator, stopOrderSimulator } from './services/orderSimulator.js';
+
+let server;
+let shuttingDown = false;
+
+async function closeServer() {
+  if (!server) return;
+
+  await new Promise((resolve, reject) => {
+    server.close((error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+}
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  console.log(`[api] ${signal} received, shutting down...`);
+
+  await Promise.allSettled([
+    closeServer(),
+    mongoose.disconnect(),
+    redis.quit(),
+    redisBlocking.quit(),
+  ]);
+
+  process.exit(0);
+}
 
 async function main() {
   await connectMongo();
   await connectRedis();
 
-  await syncSaleStatus();
-  const saleTicker = setInterval(() => { syncSaleStatus().catch((e) => console.error('[sale]', e.message)); }, 1000);
-
-  startReservationSweeper();
-  await startStreamConsumer();
-  startReconciler();
-  startOrderSimulator();
-
-  const server = createApp().listen(env.port, () => {
-    console.log(`[api] VoltCart server listening on http://localhost:${env.port}`);
+  server = createApp().listen(env.port, () => {
+    console.log(`[api] VoltCart server listening on port ${env.port}`);
   });
+}
 
-  const shutdown = async (signal) => {
-    console.log(`\n[api] ${signal} received, shutting down...`);
-    clearInterval(saleTicker);
-    stopReservationSweeper();
-    stopStreamConsumer();
-    stopReconciler();
-    stopOrderSimulator();
-    server.close();
-    await Promise.allSettled([mongoose.disconnect(), redis.quit(), redisBlocking.quit()]);
-    process.exit(0);
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+main().catch((error) => {
+  console.error('[api] failed to start:', error);
+  process.exit(1);
+});    process.exit(0);
   };
 
   process.on('SIGINT', () => shutdown('SIGINT'));
