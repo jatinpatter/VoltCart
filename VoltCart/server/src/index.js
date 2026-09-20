@@ -50,14 +50,5 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 main().catch((error) => {
   console.error('[api] failed to start:', error);
   process.exit(1);
-});    process.exit(0);
-  };
-
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-}
-
-main().catch((err) => {
-  console.error('[api] failed to start:', err);
-  process.exit(1);
+});
 });
